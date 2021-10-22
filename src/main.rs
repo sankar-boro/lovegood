@@ -2,7 +2,6 @@ mod service;
 mod ready;
 
 use std::{future::{Future}, marker::PhantomData};
-use async_std::task::block_on;
 use service::{ServiceFactory, Service};
 use ready::Ready;
 
@@ -11,8 +10,7 @@ use ready::Ready;
  */
 
 fn fn_factory<F, Req, Res, E>(service: F) -> ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static,
-// Fut: Future<Output=Result<Res, E>>
+where F: Service<Req, Res, E> + Clone + 'static
 {
     ServiceFactoryContainer::new(service)
 }
@@ -25,8 +23,7 @@ where F: Service<Req, Res, E>,
 }
 
 impl<F, Req, Res, E> ServiceFactory<F, Req, Res, E> for ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static,
-// Fut: Future<Output=Result<F, E>>
+where F: Service<Req, Res, E> + Clone + 'static
 {
     type Request = Req;
 
@@ -44,8 +41,7 @@ where F: Service<Req, Res, E> + Clone + 'static,
 }
 
 impl<F, Req, Res, E> ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static,
-// Fut: Future<Output=Result<F, E>>
+where F: Service<Req, Res, E> + Clone + 'static
 {
     fn new(service: F) -> Self {
         Self {
@@ -58,7 +54,6 @@ where F: Service<Req, Res, E> + Clone + 'static,
 /**
  * Service implementation 
  */
-
 fn fn_service<S, Fut, Req, Res, E>(service: S) -> ServiceContainer<S, Fut, Req, Res, E>
 where S: Fn(Req)-> Fut + Clone + 'static,
 Fut: Future<Output=Result<Res, E>>
@@ -122,8 +117,8 @@ async fn main() {
     let _service = fn_service(index);
     let factory = fn_factory(_service);
     let a = factory.new_service();
-    let b = block_on(a).unwrap();
+    let b = a.await.unwrap();
     let c = b.call(String::from("Hello"));
-    let d = block_on(c);
-    println!("{}", d.unwrap());
+    let d = c.await.unwrap();
+    println!("{}", d);
 }
