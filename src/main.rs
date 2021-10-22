@@ -3,19 +3,45 @@ use std::marker::PhantomData;
 
 use service::{ServiceFactory, Service};
 
+/**
+ * ServiceFactory implementation 
+ */
+
 fn fn_factory<F, Req, Res>(service: F) -> ServiceFactoryContainer<F, Req, Res> 
-where F: Service<Req, Res>
+where F: Service<Req, Res> + Clone + 'static,
 {
-    ServiceFactoryContainer { service, _t: PhantomData }
+    ServiceFactoryContainer::new(service)
 }
 
 struct ServiceFactoryContainer<F, Req, Res> 
 where F: Service<Req, Res>,
-// S: Fn(Req)->String,
 {
     service: F,
     _t: PhantomData<(Req, Res)>
 }
+
+impl<F, Req, Res> ServiceFactory<F, Req, Res> for ServiceFactoryContainer<F, Req, Res> 
+where F: Service<Req, Res> + Clone + 'static,
+{
+    fn new_service(&self) -> F {
+        self.service.clone()
+    }
+}
+
+impl<F, Req, Res> ServiceFactoryContainer<F, Req, Res> 
+where F: Service<Req, Res> + Clone + 'static,
+{
+    fn new(service: F) -> Self {
+        Self {
+            service,
+            _t: PhantomData,
+        }
+    }
+}
+
+/**
+ * Service implementation 
+ */
 
 fn fn_service<S, Req, Res>(service: S) -> ServiceContainer<S, Req, Res>
 where S: Fn(Req)-> Res + Clone + 'static
@@ -36,16 +62,6 @@ where S: Fn(Req)-> Res + Clone + 'static
         ServiceContainer { service: self.service.clone(), _t: PhantomData }
     }
 }
-
-
-impl<F, Req, Res> ServiceFactory<F, Req, Res> for ServiceFactoryContainer<F, Req, Res> 
-where F: Service<Req, Res> + Clone + 'static,
-{
-    fn new_service(&self) -> F {
-        self.service.clone()
-    }
-}
-
 
 impl<F, Req, Res> ServiceContainer<F, Req, Res> 
 where F: Fn(Req)-> Res + Clone + 'static
