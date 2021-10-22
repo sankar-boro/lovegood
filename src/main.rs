@@ -1,86 +1,79 @@
 mod service;
 use std::marker::PhantomData;
 
-use service::{Factory, Service};
+use service::{ServiceFactory, Service};
 
-fn fn_factory<F, S>(service: F) -> ServiceFactoryContainer<F, S> 
-where F: Factory<S>,
-S: Fn()->String + Clone + 'static,
+fn fn_factory<F, Req, Res>(service: F) -> ServiceFactoryContainer<F, Req, Res> 
+where F: Service<Req, Res>
 {
     ServiceFactoryContainer { service, _t: PhantomData }
 }
 
-struct ServiceFactoryContainer<F, S> 
-where F: Factory<S>,
-S: Fn()->String,
+struct ServiceFactoryContainer<F, Req, Res> 
+where F: Service<Req, Res>,
+// S: Fn(Req)->String,
 {
     service: F,
-    _t: PhantomData<S>
+    _t: PhantomData<(Req, Res)>
 }
 
-fn fn_service<S>(service: S) -> ServiceContainer<S>
-where S: Fn()->String + Clone + 'static
+fn fn_service<S, Req, Res>(service: S) -> ServiceContainer<S, Req, Res>
+where S: Fn(Req)-> Res + Clone + 'static
 {
     ServiceContainer::new(service)
 }
 
-struct ServiceContainer<S> 
-where S: Fn()->String + Clone + 'static {
-    service: S
+struct ServiceContainer<S, Req, Res> 
+where S: Fn(Req)-> Res + Clone + 'static {
+    service: S, 
+    _t: PhantomData<(Req, Res)>
 }
 
-impl<S> Clone for ServiceContainer<S> 
-where S: Fn()->String + Clone + 'static 
+impl<S, Req, Res> Clone for ServiceContainer<S, Req, Res> 
+where S: Fn(Req)-> Res + Clone + 'static 
 {
     fn clone(&self) -> Self { 
-        ServiceContainer { service: self.service.clone() }
+        ServiceContainer { service: self.service.clone(), _t: PhantomData }
     }
 }
 
 
-impl<F, S> Factory<S> for ServiceFactoryContainer<F, S> 
-where F: Factory<S>,
-S: Fn()->String,
+impl<F, Req, Res> ServiceFactory<F, Req, Res> for ServiceFactoryContainer<F, Req, Res> 
+where F: Service<Req, Res> + Clone + 'static,
 {
-    fn new_service(&self) -> S {
-        self.service.new_service()
-    }
-}
-
-impl<S> Factory<S> for ServiceContainer<S> 
-where S: Fn()->String + Clone + 'static,
-{
-    fn new_service(&self) -> S {
+    fn new_service(&self) -> F {
         self.service.clone()
     }
 }
 
-impl<F> ServiceContainer<F> 
-where F: Fn()->String + Clone + 'static
+
+impl<F, Req, Res> ServiceContainer<F, Req, Res> 
+where F: Fn(Req)-> Res + Clone + 'static
 {
     fn new(service: F) -> Self {
         ServiceContainer {
             service,
+            _t: PhantomData,
         }
     }
 }
 
-impl<F> Service for ServiceContainer<F> 
-where F: Fn()->String + Clone + 'static
+impl<F, Req, Res> Service<Req, Res> for ServiceContainer<F, Req, Res> 
+where F: Fn(Req) -> Res + Clone + 'static,
 {
-    fn call(&self) {
-        (self.service)();
+    fn call(&self, param: Req) -> Res {
+        (self.service)(param)
     }
 }
 
-fn index() -> String {
-    format!("Sankar boro")
+fn index(param: String) -> String {
+    format!("{}: Sankar boro", param)
 }
 
 fn main() {
     let service = fn_service(index);
     let factory = fn_factory(service);
-    let new_service = factory.new_service();
-    let data = new_service();
-    println!("Hello: {}", data);
+    let a = factory.new_service();
+    let b = a.call(String::from("Hello"));
+    println!("{}", b);
 }

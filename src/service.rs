@@ -1,7 +1,7 @@
-pub trait Service {
-    fn call(&self);
+pub trait Service<Req, Res> {
+    fn call(&self, param: Req) -> Res;
 }
 
-pub trait Factory<S> {
+pub trait ServiceFactory<S: Service<Req, Res>, Req, Res> {
     fn new_service(&self) -> S;
 }
