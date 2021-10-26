@@ -1,124 +1,48 @@
-mod service;
-mod ready;
+mod executor;
+mod task;
+mod reactor;
+mod threadpool;
 
-use std::{future::{Future}, marker::PhantomData};
-use service::{ServiceFactory, Service};
-use ready::Ready;
+use reactor::{Reactor};
+use task::{Task};
+use executor::block_on;
 
-/**
- * ServiceFactory implementation 
- */
+use std::{time::{ Instant}};
 
-fn fn_factory<F, Req, Res, E>(service: F) -> ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static
-{
-    ServiceFactoryContainer::new(service)
-}
+fn main() {
+    // This is just to make it easier for us to see when our Future was resolved
+    let start = Instant::now();
 
-struct ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E>,
-{
-    service: F,
-    _t: PhantomData<(Req, Res, E)>
-}
+    // Many runtimes create a global `reactor` we pass it as an argument
+    let reactor = Reactor::new();
 
-impl<F, Req, Res, E> ServiceFactory<F, Req, Res, E> for ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static
-{
-    type Request = Req;
+    // We create two tasks:
+    // - first parameter is the `reactor`
+    // - the second is a timeout in seconds
+    // - the third is an `id` to identify the task
+    let future1 = Task::new(reactor.clone(), 1, 1);
+    let future2 = Task::new(reactor.clone(), 2, 2);
 
-    type Response = Res;
+    // an `async` block works the same way as an `async fn` in that it compiles
+    // our code into a state machine, `yielding` at every `await` point.
+    let fut1 = async {
+        let val = future1.await;
+        println!("Got {} at time: {:.2}.", val, start.elapsed().as_secs_f32());
+    };
 
-    type Error = E;
+    let fut2 = async {
+        let val = future2.await;
+        println!("Got {} at time: {:.2}.", val, start.elapsed().as_secs_f32());
+    };
 
-    type Service = F;
+    // Our executor can only run one and one future, this is pretty normal
+    // though. You have a set of operations containing many futures that
+    // ends up as a single future that drives them all to completion.
+    let mainfut = async {
+        fut1.await;
+        fut2.await;
+    };
 
-    type Future = Ready<Self::Service, Self::Error>;
-
-    fn new_service(&self) -> Self::Future {
-        Ready::Ok(self.service.clone())
-    }
-}
-
-impl<F, Req, Res, E> ServiceFactoryContainer<F, Req, Res, E> 
-where F: Service<Req, Res, E> + Clone + 'static
-{
-    fn new(service: F) -> Self {
-        Self {
-            service,
-            _t: PhantomData,
-        }
-    }
-}
-
-/**
- * Service implementation 
- */
-fn fn_service<S, Fut, Req, Res, E>(service: S) -> ServiceContainer<S, Fut, Req, Res, E>
-where S: Fn(Req)-> Fut + Clone + 'static,
-Fut: Future<Output=Result<Res, E>>
-{
-    ServiceContainer::new(service)
-}
-
-struct ServiceContainer<S, Fut, Req, Res, E> 
-where S: Fn(Req)-> Fut + Clone + 'static,
-Fut: Future<Output=Result<Res, E>>
-{
-    service: S, 
-    _t: PhantomData<(Req, Res)>
-}
-
-impl<S, Fut, Req, Res, E> Clone for ServiceContainer<S, Fut, Req, Res, E> 
-where S: Fn(Req)-> Fut + Clone + 'static,
-Fut: Future<Output=Result<Res, E>> 
-{
-    fn clone(&self) -> Self { 
-        ServiceContainer { service: self.service.clone(), _t: PhantomData }
-    }
-}
-
-impl<F, Fut, Req, Res, E> ServiceContainer<F, Fut, Req, Res, E> 
-where F: Fn(Req)-> Fut + Clone + 'static,
-Fut: Future<Output=Result<Res, E>>
-{
-    fn new(service: F) -> Self {
-        ServiceContainer {
-            service,
-            _t: PhantomData,
-        }
-    }
-}
-
-impl<F, Fut, Req, Res, E> Service<Req, Res, E> for ServiceContainer<F, Fut, Req, Res, E> 
-where F: Fn(Req) -> Fut + Clone + 'static,
-Fut: Future<Output=Result<Res, E>>
-{
-
-    type Request = Req;
-
-    type Response = Res;
-
-    type Error = E;
-
-    type Future = Fut;
-
-    fn call(&self, param: Req) -> Self::Future {
-        (self.service)(param)
-    }
-}
-
-async fn index(param: String) -> Result<String, ()> {
-    Ok(format!("{}: Sankar boro", param))
-}
-
-#[async_std::main]
-async fn main() {
-    let _service = fn_service(index);
-    let factory = fn_factory(_service);
-    let a = factory.new_service();
-    let b = a.await.unwrap();
-    let c = b.call(String::from("Hello"));
-    let d = c.await.unwrap();
-    println!("{}", d);
+    // This executor will block the main thread until the futures are resolved
+    block_on(mainfut);
 }

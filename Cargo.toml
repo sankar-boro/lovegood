@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 async-std = { version = "1.10.0", features = ["attributes" ] }
 futures-core = "0.3.17"
+num_cpus = "1.13.0"
